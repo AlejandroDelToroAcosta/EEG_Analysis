@@ -171,7 +171,7 @@ def extract_labeled_events(events, event_id_stim=128, event_ids_response=[2, 4, 
     return events_labeled, metadata, report
 
 
-def preprocessing_grandchamp(sub, stage, session, bids_root=None,
+def preprocessing_grandchamp_v2(sub, stage, session, bids_root=None,
                                 use_bids=True, fast_mode=False, min_responses=2):
     """
     EEG preprocessing with stimulus-locked epoching and response labels
@@ -217,9 +217,20 @@ def preprocessing_grandchamp(sub, stage, session, bids_root=None,
     else:
         bids_root = Path(bids_root)
 
-    p_prepro = Path('preprocessing')
-    p_prepro.mkdir(exist_ok=True)
+    p_prepro_session1 = Path('preprocessing/session_1')
+    p_prepro_session2 = Path('preprocessing/session_2')
 
+    p_prepro_session1_metadata = Path('preprocessing/session_1/metadata')
+    p_prepro_session2_metadata = Path('preprocessing/session_2/metadata')
+
+    p_prepro_session2.mkdir(exist_ok=True)
+    p_prepro_session1.mkdir(exist_ok=True)
+
+    p_prepro_session2_metadata.mkdir(exist_ok=True)
+    p_prepro_session1_metadata.mkdir(exist_ok=True)
+
+    p_session = p_prepro_session1 if ses_str == '01' else p_prepro_session2
+    p_metadata = p_prepro_session1_metadata if ses_str == '01' else p_prepro_session2_metadata
     # Parameters
     l_freq = 0.1
     h_freq = 42
@@ -290,7 +301,15 @@ def preprocessing_grandchamp(sub, stage, session, bids_root=None,
         )
 
         # Save metadata
-        metadata_file = p_prepro / f'{sub_str}_{ses_str}_metadata.csv'
+        if ses_str == "01":
+            metadata_file = p_prepro_session1_metadata / f'{sub_str}_{ses_str}_metadata.csv'
+            report_file = p_prepro_session1_metadata / f'{sub_str}_{ses_str}_extraction_report.txt'
+
+        else:
+            metadata_file = p_prepro_session2_metadata / f'{sub_str}_{ses_str}_metadata.csv'
+            report_file = p_prepro_session2_metadata / f'{sub_str}_{ses_str}_extraction_report.txt'
+
+
 
         # Add RT in seconds
         sfreq = raw.info['sfreq']
@@ -301,8 +320,7 @@ def preprocessing_grandchamp(sub, stage, session, bids_root=None,
         metadata.to_csv(metadata_file, index=False)
         print(f"\n✓ Metadata saved: {metadata_file}")
 
-        # Save report
-        report_file = p_prepro / f'{sub_str}_{ses_str}_extraction_report.txt'
+
         with open(report_file, 'w') as f:
             f.write("="*70 + "\n")
             f.write("STIMULUS-LOCKED EXTRACTION REPORT\n")
@@ -357,7 +375,12 @@ def preprocessing_grandchamp(sub, stage, session, bids_root=None,
 
         # Save
         f_out = f'{sub_str}_{ses_str}_epochs-epo.fif'
-        epochs.save(p_prepro / f_out, overwrite=True)
+        if ses_str == "01":
+            epochs.save(p_prepro_session1 / f_out, overwrite=True)
+        else:
+            epochs.save(p_prepro_session2 / f_out, overwrite=True)
+
+
         print(f"\n✓ Saved: {f_out}")
 
         return epochs
@@ -369,7 +392,12 @@ def preprocessing_grandchamp(sub, stage, session, bids_root=None,
 
         # 1. Cargar las épocas del Stage 1
         f_in = f'{sub_str}_{ses_str}_epochs-epo.fif'
-        epochs = mne.read_epochs(p_prepro / f_in, preload=True)
+        if ses_str == "01":
+            epochs = mne.read_epochs(p_prepro_session1 / f_in, preload=True)
+
+        else:
+            epochs = mne.read_epochs(p_prepro_session2 / f_in, preload=True)
+
 
         print(f"\nLoaded {len(epochs)} epochs")
 
@@ -390,7 +418,11 @@ def preprocessing_grandchamp(sub, stage, session, bids_root=None,
 
         # 4. GUARDAR EL RESULTADO LIMPIO
         # Sobrescribimos el archivo para que el Stage 3 (ICA) use los datos sin ruido bruto
-        epochs.save(p_prepro / f_in, overwrite=True)
+        if ses_str == "01":
+            epochs.save(p_prepro_session1 / f_in, overwrite=True)
+
+        else:
+            epochs.save(p_prepro_session2 / f_in, overwrite=True)
         print(f"✓ Épocas filtradas visualmente guardadas en: {f_in}")
 
         return epochs
@@ -401,7 +433,7 @@ def preprocessing_grandchamp(sub, stage, session, bids_root=None,
         print(f"\n=== Stage 3: ICA ===")
 
         f_in = f'{sub_str}_{ses_str}_epochs-epo.fif'
-        epochs = mne.read_epochs(p_prepro / f_in, preload=True)
+        epochs = mne.read_epochs(p_session / f_in, preload=True)
 
         print(f"Loaded {len(epochs)} epochs")
 
@@ -427,10 +459,10 @@ def preprocessing_grandchamp(sub, stage, session, bids_root=None,
         ica.fit(epochs)
 
         f_ica = f'{sub_str}_{ses_str}_ica.fif'
-        ica.save(p_prepro / f_ica, overwrite=True)
+        ica.save(p_session / f_ica, overwrite=True)
 
         f_out = f'{sub_str}_{ses_str}_epochs_ica-epo.fif'
-        epochs.save(p_prepro / f_out, overwrite=True)
+        epochs.save(p_session / f_out, overwrite=True)
 
         print(f"\n✓ Saved: {f_ica}, {f_out}")
 
@@ -446,8 +478,8 @@ def preprocessing_grandchamp(sub, stage, session, bids_root=None,
         f_epochs = f'{sub_str}_{ses_str}_epochs_ica-epo.fif'
         f_ica = f'{sub_str}_{ses_str}_ica.fif'
 
-        epochs = mne.read_epochs(p_prepro / f_epochs, preload=True)
-        ica = mne.preprocessing.read_ica(p_prepro / f_ica)
+        epochs = mne.read_epochs(p_session / f_epochs, preload=True)
+        ica = mne.preprocessing.read_ica(p_session / f_ica)
 
         print(f"Loaded {len(epochs)} epochs and ICA with {ica.n_components_} components")
 
@@ -462,7 +494,7 @@ def preprocessing_grandchamp(sub, stage, session, bids_root=None,
         print(">>> ica.exclude = [0, 2, 5]  # Replace with bad component indices")
 
         print("\nTo save ICA with marked components:")
-        print(f">>> ica.save('{p_prepro / f_ica}', overwrite=True)")
+        print(f">>> ica.save('{p_session / f_ica}', overwrite=True)")
 
         print("\n" + "="*70)
         print("OPTIONAL: Automatic artifact detection")
@@ -476,7 +508,7 @@ def preprocessing_grandchamp(sub, stage, session, bids_root=None,
                 print(f"  Scores: {eog_scores[eog_indices]}")
                 print("\nTo accept these automatically:")
                 print(f">>> ica.exclude = {eog_indices}")
-                print(f">>> ica.save('{p_prepro / f_ica}', overwrite=True)")
+                print(f">>> ica.save('{p_session / f_ica}', overwrite=True)")
             else:
                 print("\n⚠️  No EOG components detected automatically")
                 print("  → Inspect components manually")
@@ -498,8 +530,8 @@ def preprocessing_grandchamp(sub, stage, session, bids_root=None,
         f_epochs = f'{sub_str}_{ses_str}_epochs_ica-epo.fif'
         f_ica = f'{sub_str}_{ses_str}_ica.fif'
 
-        epochs = mne.read_epochs(p_prepro / f_epochs, preload=True)
-        ica = mne.preprocessing.read_ica(p_prepro / f_ica)
+        epochs = mne.read_epochs(p_session / f_epochs, preload=True)
+        ica = mne.preprocessing.read_ica(p_session / f_ica)
 
         print(f"Loaded {len(epochs)} epochs")
         print(f"ICA components to remove: {ica.exclude}")
@@ -519,7 +551,7 @@ def preprocessing_grandchamp(sub, stage, session, bids_root=None,
 
         # Save cleaned epochs
         f_out = f'{sub_str}_{ses_str}_epochs_ica_a-epo.fif'
-        epochs_clean.save(p_prepro / f_out, overwrite=True)
+        epochs_clean.save(p_session / f_out, overwrite=True)
         print(f"\n✓ Saved: {f_out}")
 
         print("\n" + "="*70)
@@ -532,7 +564,7 @@ def preprocessing_grandchamp(sub, stage, session, bids_root=None,
         print(">>> epochs_clean.drop_bad()")
 
         print("\nTo save after manual inspection:")
-        print(f">>> epochs_clean.save('{p_prepro / f_out}', overwrite=True)")
+        print(f">>> epochs_clean.save('{p_session / f_out}', overwrite=True)")
         print("="*70)
 
         return epochs_clean
@@ -545,7 +577,7 @@ def preprocessing_grandchamp(sub, stage, session, bids_root=None,
 
         # Load cleaned epochs
         f_in = f'{sub_str}_{ses_str}_epochs_ica_a-epo.fif'
-        epochs = mne.read_epochs(p_prepro / f_in, preload=True)
+        epochs = mne.read_epochs(p_session / f_in, preload=True)
 
         print(f"Loaded {len(epochs)} epochs")
 
@@ -578,11 +610,11 @@ def preprocessing_grandchamp(sub, stage, session, bids_root=None,
 
         # Save final epochs
         f_out = f'{sub_str}_{ses_str}_epochs_ica_a2-epo.fif'
-        epochs.save(p_prepro / f_out, overwrite=True)
+        epochs.save(p_session / f_out, overwrite=True)
         print(f"\n✓ Final epochs saved: {f_out}")
 
         # Save summary report
-        summary_file = p_prepro / f'{sub_str}_{ses_str}_final_summary.txt'
+        summary_file = p_session / f'{sub_str}_{ses_str}_final_summary.txt'
         with open(summary_file, 'w') as f:
             f.write("="*70 + "\n")
             f.write("PREPROCESSING PIPELINE SUMMARY\n")
@@ -613,8 +645,8 @@ def preprocessing_grandchamp(sub, stage, session, bids_root=None,
         print("🎉 PREPROCESSING PIPELINE COMPLETE!")
         print("="*70)
         print("\nYour data is ready for analysis!")
-        print(f"\nFinal cleaned epochs: {p_prepro / f_out}")
-        print(f"Load with: epochs = mne.read_epochs('{p_prepro / f_out}')")
+        print(f"\nFinal cleaned epochs: {p_session / f_out}")
+        print(f"Load with: epochs = mne.read_epochs('{p_session / f_out}')")
         print("="*70)
 
         return epochs

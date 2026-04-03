@@ -375,7 +375,16 @@ def extract_features_from_epochs(epochs, channels_of_interest=None,
             for j, ch2 in enumerate(ch_list):
                 if i < j:  # Avoid duplicates (PO7-Pz same as Pz-PO7)
                     pair_name = f'{ch1}_{ch2}'
+                    if epoch_idx == 0:  # Solo miramos la primera época para no inundar la consola
+                        p1_debug = alpha_phase[epoch_idx, i, signal_mask]
+                        p2_debug = alpha_phase[epoch_idx, j, signal_mask]
 
+                        print(f"\n--- DEBUG ISPC {pair_name} ---")
+                        print(f"Canal 1 ({ch1}) idx: {i} | Canal 2 ({ch2}) idx: {j}")
+                        print(f"¿Son los datos idénticos?: {np.array_equal(p1_debug, p2_debug)}")
+                        print(f"Varianza Fase 1: {np.var(p1_debug):.6f}")
+                        print(f"Diferencia de fase (primeros 5): {(p1_debug - p2_debug)[:5]}")
+                    # ----------------------------
                     # Alpha ISPC
                     # CRITICAL: Average vectors WITHIN window, then magnitude
                     # Baseline window
