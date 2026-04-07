@@ -523,48 +523,55 @@ def preprocessing_grandchamp_v2(sub, stage, session, bids_root=None,
     # STAGE 5: Apply ICA and inspect epochs again
     # ========================================================================
     elif stage == 5:
-        print(f"\n=== Stage 5: Apply ICA ===")
+        print(f"\n=== Stage 4: Apply ICA & Final Clean-up ===")
 
-        # Load epochs and ICA
-        f_epochs = f'{sub_str}_{ses_str}_epochs_ica-epo.fif'
+        # 1. Cargar archivos
+        f_in = f'{sub_str}_{ses_str}_epochs_ica-epo.fif'
         f_ica = f'{sub_str}_{ses_str}_ica.fif'
+        f_out = f'{sub_str}_{ses_str}_epochs_ica_a-epo.fif'
 
-        epochs = mne.read_epochs(p_session / f_epochs, preload=True)
+        p_session = p_prepro_session1 if ses_str == "01" else p_prepro_session2
+
+        epochs = mne.read_epochs(p_session / f_in, preload=True)
         ica = mne.preprocessing.read_ica(p_session / f_ica)
 
         print(f"Loaded {len(epochs)} epochs")
-        print(f"ICA components to remove: {ica.exclude}")
+        print(f"ICA components to remove (marked in Stage 4): {ica.exclude}")
 
         if len(ica.exclude) == 0:
-            print("\n⚠️  WARNING: No components marked for removal!")
-            print("  Run Stage 4 first and mark bad components")
-            print("  Or the ICA will have no effect")
+            print("\n⚠️  WARNING: No hay componentes marcados para eliminar.")
+            print("Asegúrate de haber guardado los cambios en la Stage 4.")
 
-        # Apply ICA (remove marked components)
-        print(f"\nApplying ICA (removing {len(ica.exclude)} components)...")
+        # 2. APLICAR ICA
+        print(f"\nEliminando {len(ica.exclude)} componentes...")
+        # .copy() es vital para no destruir los epochs originales en memoria
         epochs_clean = ica.apply(epochs.copy())
 
-        # Re-apply baseline correction
-        print("Re-applying baseline correction...")
+        # 3. RE-APLICAR BASELINE
+        # Al quitar componentes, el nivel DC de la señal puede variar ligeramente
+        print("Re-aplicando corrección de línea base (baseline)...")
         epochs_clean.apply_baseline((-0.5, 0))
 
-        # Save cleaned epochs
-        f_out = f'{sub_str}_{ses_str}_epochs_ica_a-epo.fif'
+        # 4. INSPECCIÓN INTERACTIVA FINAL
+        print("\nAbriendo inspección de épocas LIMPIAS...")
+        print("INSTRUCCIONES: Revisa que los parpadeos hayan desaparecido.")
+        print("Si alguna época todavía tiene mucho ruido (ej. muscular), márcala en ROJO.")
+
+        # El parámetro 'block=True' detiene el script para que revises
+        epochs_clean.plot(n_epochs=10, n_channels=30, block=True, scalings='auto')
+
+        # 5. ELIMINAR ÉPOCAS MALAS Y GUARDAR
+        n_prev = len(epochs_clean)
+        epochs_clean.drop_bad()  # Elimina las que marcaste en el plot anterior
+        n_post = len(epochs_clean)
+
+        print(f"\nLimpieza finalizada:")
+        print(f"  Épocas descartadas en este paso: {n_prev - n_post}")
+        print(f"  Épocas totales listas para ML: {n_post}")
+
+        # Guardar el archivo definitivo que usaremos para CWT y EEGNex
         epochs_clean.save(p_session / f_out, overwrite=True)
-        print(f"\n✓ Saved: {f_out}")
-
-        print("\n" + "="*70)
-        print("OPTIONAL: Visual inspection of cleaned epochs")
-        print("="*70)
-        print("\nTo visually inspect cleaned epochs:")
-        print(">>> epochs_clean.plot(n_epochs=10, n_channels=30, block=True, scalings='auto')")
-
-        print("\nTo mark additional bad epochs:")
-        print(">>> epochs_clean.drop_bad()")
-
-        print("\nTo save after manual inspection:")
-        print(f">>> epochs_clean.save('{p_session / f_out}', overwrite=True)")
-        print("="*70)
+        print(f"✓ Épocas limpias guardadas en: {f_out}")
 
         return epochs_clean
 
