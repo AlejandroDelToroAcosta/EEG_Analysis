@@ -468,55 +468,54 @@ def preprocessing_grandchamp_v2(sub, stage, session, bids_root=None,
 
         return epochs, ica
 
-    # ========================================================================
-    # STAGE 4: Inspect ICA components
-    # ========================================================================
+        # ========================================================================
+        # STAGE 4: Inspect ICA components (INTERACTIVE & AUTO-SAVE)
+        # ========================================================================
     elif stage == 4:
-        print(f"\n=== Stage 4: Inspect ICA Components ===")
+        print(f"\n=== Stage 4: Inspect ICA Components (Interactive) ===")
 
-        # Load epochs and ICA
+        # 1. Cargar archivos
         f_epochs = f'{sub_str}_{ses_str}_epochs_ica-epo.fif'
         f_ica = f'{sub_str}_{ses_str}_ica.fif'
+
+        # Lógica de rutas (asumiendo tus variables p_prepro_session)
+        p_session = p_prepro_session1 if ses_str == "01" else p_prepro_session2
 
         epochs = mne.read_epochs(p_session / f_epochs, preload=True)
         ica = mne.preprocessing.read_ica(p_session / f_ica)
 
-        print(f"Loaded {len(epochs)} epochs and ICA with {ica.n_components_} components")
+        montage = mne.channels.make_standard_montage('biosemi64')
+        epochs.set_montage(montage, on_missing='ignore')
 
-        print("\n" + "="*70)
-        print("MANUAL INSPECTION REQUIRED")
-        print("="*70)
-        print("\nTo inspect ICA components, run the following commands:\n")
-        print(">>> ica.plot_components(picks=range(30), inst=epochs)")
-        print(">>> ica.plot_sources(epochs, block=True)")
-
-        print("\nTo mark bad components (e.g., eye blinks, muscle artifacts):")
-        print(">>> ica.exclude = [0, 2, 5]  # Replace with bad component indices")
-
-        print("\nTo save ICA with marked components:")
-        print(f">>> ica.save('{p_session / f_ica}', overwrite=True)")
-
-        print("\n" + "="*70)
-        print("OPTIONAL: Automatic artifact detection")
-        print("="*70)
-
-        # Automatic EOG detection
+        # 2. Detección automática (Sugerencia inicial)
+        print("\nEjecutando detección automática de EOG...")
         try:
             eog_indices, eog_scores = ica.find_bads_eog(epochs, threshold=3.0)
-            if len(eog_indices) > 0:
-                print(f"\n✓ Automatic EOG detection found components: {eog_indices}")
-                print(f"  Scores: {eog_scores[eog_indices]}")
-                print("\nTo accept these automatically:")
-                print(f">>> ica.exclude = {eog_indices}")
-                print(f">>> ica.save('{p_session / f_ica}', overwrite=True)")
+            if eog_indices:
+                print(f"  → Componentes sugeridos para eliminar (EOG): {eog_indices}")
+                ica.exclude = list(set(ica.exclude + eog_indices))  # Añadimos sin duplicar
             else:
-                print("\n⚠️  No EOG components detected automatically")
-                print("  → Inspect components manually")
+                print("  → No se detectaron artefactos oculares claros automáticamente.")
         except Exception as e:
-            print(f"\n⚠️  Automatic EOG detection failed: {e}")
-            print("  → Inspect components manually")
+            print(f"  → Error en detección automática: {e}")
 
-        print("\n" + "="*70)
+        # 3. LANZAR EL PLOT INTERACTIVO
+        print("\nAbriendo interfaz de ICA...")
+        print("INSTRUCCIONES: Haz clic en el NOMBRE del componente (ej. 'ICA001') para marcarlo/desmarcarlo.")
+
+        # Esta ventana te permite ver la forma (topografía) de los componentes
+        ica.plot_sources(inst=epochs, block = True)
+
+        # Opcional: También puedes abrir el plot de fuentes si prefieres ver las ondas
+        # ica.plot_sources(epochs, block=True)
+
+        # 4. GUARDAR CAMBIOS AUTOMÁTICAMENTE
+        print(f"\nComponentes marcados para exclusión: {ica.exclude}")
+
+        # Guardamos el archivo ICA. Ahora llevará grabada la lista de 'bads'.
+        ica.save(p_session / f_ica, overwrite=True)
+
+        print(f"✓ Archivo ICA actualizado con las exclusiones en: {f_ica}")
 
         return epochs, ica
 
