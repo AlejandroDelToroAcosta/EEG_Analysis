@@ -109,7 +109,7 @@ def extract_labeled_events(events, event_id_stim=128, event_ids_response=[2, 4, 
                 label = 0  # On-Task
                 label_str = 'on_task'
 
-            # CRITICAL: Event is STIMULUS (128), not response
+           
             events_labeled.append([stim_sample, 0, label])
 
             metadata_list.append({
@@ -392,7 +392,6 @@ def preprocessing_grandchamp_v2(sub, stage, session, bids_root=None,
     elif stage == 2:
         print(f"\n=== Stage 2: Visual Inspection (Interactive) ===")
 
-        # 1. Cargar las épocas del Stage 1
         f_in = f'{sub_str}_{ses_str}_epochs-epo.fif'
         if ses_str == "01":
             epochs = mne.read_epochs(p_prepro_session1 / f_in, preload=True)
@@ -403,23 +402,17 @@ def preprocessing_grandchamp_v2(sub, stage, session, bids_root=None,
 
         print(f"\nLoaded {len(epochs)} epochs")
 
-        # 2. LANZAR EL PLOT INTERACTIVO
-        # El programa se detendrá aquí hasta que cierres la ventana (gracias a block=True)
         print("\nAbriendo interfaz de inspección... Marca en ROJO las épocas con mucho ruido.")
         epochs.plot(n_epochs=10, n_channels=30, block=True, scalings='auto')
 
-        # 3. APLICAR CAMBIOS
-        # Una vez cierras la ventana, el código sigue ejecutándose:
         n_prev = len(epochs)
-        epochs.drop_bad()  # Elimina físicamente las marcadas en rojo
+        epochs.drop_bad()  
         n_post = len(epochs)
 
         print(f"\nInspección finalizada:")
         print(f"  Épocas eliminadas: {n_prev - n_post}")
         print(f"  Épocas restantes: {n_post}")
 
-        # 4. GUARDAR EL RESULTADO LIMPIO
-        # Sobrescribimos el archivo para que el Stage 3 (ICA) use los datos sin ruido bruto
         if ses_str == "01":
             epochs.save(p_prepro_session1 / f_in, overwrite=True)
 
@@ -476,11 +469,9 @@ def preprocessing_grandchamp_v2(sub, stage, session, bids_root=None,
     elif stage == 4:
         print(f"\n=== Stage 4: Inspect ICA Components (Interactive) ===")
 
-        # 1. Cargar archivos
         f_epochs = f'{sub_str}_{ses_str}_epochs_ica-epo.fif'
         f_ica = f'{sub_str}_{ses_str}_ica.fif'
 
-        # Lógica de rutas (asumiendo tus variables p_prepro_session)
         p_session = p_prepro_session1 if ses_str == "01" else p_prepro_session2
 
         epochs = mne.read_epochs(p_session / f_epochs, preload=True)
@@ -489,32 +480,25 @@ def preprocessing_grandchamp_v2(sub, stage, session, bids_root=None,
         montage = mne.channels.make_standard_montage('biosemi64')
         epochs.set_montage(montage, on_missing='ignore')
 
-        # 2. Detección automática (Sugerencia inicial)
         print("\nEjecutando detección automática de EOG...")
         try:
             eog_indices, eog_scores = ica.find_bads_eog(epochs, threshold=3.0)
             if eog_indices:
                 print(f"  → Componentes sugeridos para eliminar (EOG): {eog_indices}")
-                ica.exclude = list(set(ica.exclude + eog_indices))  # Añadimos sin duplicar
+                ica.exclude = list(set(ica.exclude + eog_indices)) 
             else:
                 print("  → No se detectaron artefactos oculares claros automáticamente.")
         except Exception as e:
             print(f"  → Error en detección automática: {e}")
 
-        # 3. LANZAR EL PLOT INTERACTIVO
         print("\nAbriendo interfaz de ICA...")
         print("INSTRUCCIONES: Haz clic en el NOMBRE del componente (ej. 'ICA001') para marcarlo/desmarcarlo.")
 
-        # Esta ventana te permite ver la forma (topografía) de los componentes
         ica.plot_sources(inst=epochs, block = True)
 
-        # Opcional: También puedes abrir el plot de fuentes si prefieres ver las ondas
-        # ica.plot_sources(epochs, block=True)
 
-        # 4. GUARDAR CAMBIOS AUTOMÁTICAMENTE
         print(f"\nComponentes marcados para exclusión: {ica.exclude}")
 
-        # Guardamos el archivo ICA. Ahora llevará grabada la lista de 'bads'.
         ica.save(p_session / f_ica, overwrite=True)
 
         print(f"✓ Archivo ICA actualizado con las exclusiones en: {f_ica}")
@@ -544,34 +528,27 @@ def preprocessing_grandchamp_v2(sub, stage, session, bids_root=None,
             print("\n⚠️  WARNING: No hay componentes marcados para eliminar.")
             print("Asegúrate de haber guardado los cambios en la Stage 4.")
 
-        # 2. APLICAR ICA
+
         print(f"\nEliminando {len(ica.exclude)} componentes...")
-        # .copy() es vital para no destruir los epochs originales en memoria
         epochs_clean = ica.apply(epochs.copy())
 
-        # 3. RE-APLICAR BASELINE
-        # Al quitar componentes, el nivel DC de la señal puede variar ligeramente
         print("Re-aplicando corrección de línea base (baseline)...")
         epochs_clean.apply_baseline((-0.5, 0))
 
-        # 4. INSPECCIÓN INTERACTIVA FINAL
         print("\nAbriendo inspección de épocas LIMPIAS...")
         print("INSTRUCCIONES: Revisa que los parpadeos hayan desaparecido.")
         print("Si alguna época todavía tiene mucho ruido (ej. muscular), márcala en ROJO.")
 
-        # El parámetro 'block=True' detiene el script para que revises
         epochs_clean.plot(n_epochs=10, n_channels=30, block=True, scalings='auto')
 
-        # 5. ELIMINAR ÉPOCAS MALAS Y GUARDAR
         n_prev = len(epochs_clean)
-        epochs_clean.drop_bad()  # Elimina las que marcaste en el plot anterior
+        epochs_clean.drop_bad() 
         n_post = len(epochs_clean)
 
         print(f"\nLimpieza finalizada:")
         print(f"  Épocas descartadas en este paso: {n_prev - n_post}")
         print(f"  Épocas totales listas para ML: {n_post}")
 
-        # Guardar el archivo definitivo que usaremos para CWT y EEGNex
         epochs_clean.save(p_session / f_out, overwrite=True)
         print(f"✓ Épocas limpias guardadas en: {f_out}")
 
